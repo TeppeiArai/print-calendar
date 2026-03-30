@@ -2,31 +2,75 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+
+const MAX_IMAGE_WIDTH = 1600;
+const JPEG_QUALITY = 0.8;
+
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > MAX_IMAGE_WIDTH) {
+        height = Math.round(height * (MAX_IMAGE_WIDTH / width));
+        width = MAX_IMAGE_WIDTH;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Canvas not supported"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      const base64 = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+      resolve(base64);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("画像の読み込みに失敗しました"));
+    };
+    img.src = url;
+  });
+}
 
 export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const libraryInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/");
     }
+    const savedError = sessionStorage.getItem("analyzeError");
+    if (savedError) {
+      setError(savedError);
+      sessionStorage.removeItem("analyzeError");
+    }
   }, [status, router]);
 
-  const handleImageSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setError(null);
+    setCompressing(true);
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result as string;
+    try {
+      const base64 = await compressImage(file);
       sessionStorage.setItem("printImage", base64);
       router.push("/analyze");
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      setError("画像の処理に失敗しました。別の画像をお試しください。");
+      setCompressing(false);
+    }
   };
 
   if (status === "loading") {
@@ -48,6 +92,19 @@ export default function HomePage() {
           ログアウト
         </button>
       </div>
+
+      {error && (
+        <div className="max-w-sm mx-auto mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+          {error}
+        </div>
+      )}
+
+      {compressing && (
+        <div className="fixed inset-0 bg-white/80 flex flex-col items-center justify-center z-50">
+          <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
+          <p className="mt-4 text-gray-600">画像を準備しています...</p>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col items-center justify-center gap-4">
         <input

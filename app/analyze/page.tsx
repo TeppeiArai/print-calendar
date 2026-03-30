@@ -26,12 +26,17 @@ export default function AnalyzePage() {
 
     const analyze = async () => {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+
         const res = await fetch("/api/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageBase64 }),
+          signal: controller.signal,
         });
 
+        clearTimeout(timeoutId);
         const data = await res.json();
 
         if (data.success && data.data) {
@@ -41,8 +46,12 @@ export default function AnalyzePage() {
           sessionStorage.setItem("analyzeError", data.error || "解析に失敗しました");
           router.push("/home");
         }
-      } catch {
-        sessionStorage.setItem("analyzeError", "通信エラーが発生しました");
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          sessionStorage.setItem("analyzeError", "通信がタイムアウトしました。電波の良い場所で再度お試しください。");
+        } else {
+          sessionStorage.setItem("analyzeError", "通信エラーが発生しました。ネットワーク接続を確認してください。");
+        }
         router.push("/home");
       }
     };
