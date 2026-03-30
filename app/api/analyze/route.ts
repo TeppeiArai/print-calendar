@@ -3,6 +3,8 @@ import { auth } from "@/auth";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { ExtractedEvent, AnalyzeResponse } from "@/types";
 
+export const maxDuration = 30;
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) {
@@ -68,6 +70,7 @@ JSONのみを返してください。説明文は不要です。`;
     const response: AnalyzeResponse = { success: true, data };
     return NextResponse.json(response);
   } catch (error) {
+    console.error("Analyze API error:", error);
     const message = error instanceof Error ? error.message : "解析中にエラーが発生しました";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
